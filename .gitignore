@@ -52,6 +52,7 @@ spring-ai-alibaba-multi-model-example/dashscope-multi-model/src/main/resources/m
 __pycache__/
 *.py[cod]
 .env.*
+!.env.example
 node_modules/
 dist/
 build/
