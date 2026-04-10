@@ -46,3 +46,12 @@ spring-ai-alibaba-multi-model-example/dashscope-multi-model/src/main/resources/m
 
 .bash_profilesource
 /spring-ai-alibaba-chat-example/dashscope-chat/src/main/java/com/alibaba/cloud/ai/example/chat/dashscope/network/.venv/
+
+# --- Baseline Ignore Rules ---
+.idea/
+__pycache__/
+*.py[cod]
+.env.*
+node_modules/
+dist/
+build/
