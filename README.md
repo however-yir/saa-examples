@@ -18,6 +18,14 @@
 
 欢迎任何形式的代码贡献。
 
+## Quickstart Matrix (Community Contribution)
+
+| module | purpose | command | required services | env vars |
+|---|---|---|---|---|
+| spring-ai-alibaba-mcp-example | MCP demo | `mvn -pl spring-ai-alibaba-mcp-example spring-boot:run` | none/local mcp tool | model api key |
+| spring-ai-alibaba-rag-example | RAG demo | `mvn -pl spring-ai-alibaba-rag-example spring-boot:run` | vector db (optional by profile) | model api key, embedding model |
+| spring-ai-alibaba-tool-calling-example | tool calling | `mvn -pl spring-ai-alibaba-tool-calling-example spring-boot:run` | none | model api key |
+
 ## Baseline Maintenance
 
 ### Environment
@@ -46,7 +54,6 @@
 - Install dependencies for this module before execution.
 - Use the standard project command to build and run (for example Maven, Gradle, npm, or Python entrypoint scripts in this repository).
 
-
 ## Contributor Quick Verification
 <!-- codex-batch30-readme -->
 
@@ -55,4 +62,3 @@ Before opening a PR, run these quick checks locally:
 - Build: `git status`
 - Tests: `(no dedicated test command documented)`
 - Keep changes focused: one topic per PR with a clear title
-
