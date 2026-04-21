@@ -29,45 +29,103 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect changed files
+        id: changes
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          base=""
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base="${{ github.event.pull_request.base.sha }}"
+          elif [[ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]]; then
+            base="${{ github.event.before }}"
+          fi
+
+          if [[ -n "$base" ]] && git cat-file -e "$base^{commit}" 2>/dev/null; then
+            git diff --name-only "$base" HEAD > /tmp/changed-files.txt
+          elif git rev-parse HEAD^ >/dev/null 2>&1; then
+            git diff --name-only HEAD^ HEAD > /tmp/changed-files.txt
+          else
+            git ls-files > /tmp/changed-files.txt
+          fi
+
+          echo "Changed files:"
+          sed -n '1,200p' /tmp/changed-files.txt
+
+          run_node=false
+          run_python=false
+          run_java=false
+          run_go=false
+
+          while IFS= read -r path; do
+            case "$path" in
+              *.js|*.jsx|*.ts|*.tsx|package.json|package-lock.json|yarn.lock|pnpm-lock.yaml|vite.config.*|next.config.*|postcss.config.*|eslint.config.*)
+                run_node=true
+                ;;
+              *.py|requirements.txt|pyproject.toml)
+                run_python=true
+                ;;
+              *.java|*.kt|*.kts|pom.xml|*/pom.xml|build.gradle|build.gradle.kts|mvnw|mvnw.cmd)
+                run_java=true
+                ;;
+              *.go|go.mod|go.sum)
+                run_go=true
+                ;;
+            esac
+          done < /tmp/changed-files.txt
+
+          echo "run_node=$run_node" >> "$GITHUB_OUTPUT"
+          echo "run_python=$run_python" >> "$GITHUB_OUTPUT"
+          echo "run_java=$run_java" >> "$GITHUB_OUTPUT"
+          echo "run_go=$run_go" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node
-        if: ${{ hashFiles('**/package.json') != '' }}
+        if: ${{ steps.changes.outputs.run_node == 'true' && hashFiles('**/package.json') != '' }}
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Setup Python
-        if: ${{ hashFiles('**/requirements.txt', '**/pyproject.toml') != '' }}
+        if: ${{ steps.changes.outputs.run_python == 'true' && hashFiles('**/requirements.txt', '**/pyproject.toml') != '' }}
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
       - name: Setup Java
-        if: ${{ hashFiles('**/pom.xml', '**/build.gradle', '**/build.gradle.kts') != '' }}
+        if: ${{ steps.changes.outputs.run_java == 'true' && hashFiles('**/pom.xml', '**/build.gradle', '**/build.gradle.kts') != '' }}
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Setup Go
-        if: ${{ hashFiles('**/go.mod') != '' }}
+        if: ${{ steps.changes.outputs.run_go == 'true' && hashFiles('**/go.mod') != '' }}
         uses: actions/setup-go@v5
         with:
           go-version: '1.22'
 
       - name: Lint
         shell: bash
+        env:
+          RUN_NODE: ${{ steps.changes.outputs.run_node }}
+          RUN_PYTHON: ${{ steps.changes.outputs.run_python }}
+          RUN_JAVA: ${{ steps.changes.outputs.run_java }}
+          RUN_GO: ${{ steps.changes.outputs.run_go }}
         run: |
           set -euo pipefail
           ran=0
 
-          if [ -f package.json ]; then
+          if [[ "$RUN_NODE" == "true" && -f package.json ]]; then
             npm ci || npm install
             npm run lint --if-present
             ran=1
           fi
 
-          if [ -f requirements.txt ] || [ -f pyproject.toml ]; then
+          if [[ "$RUN_PYTHON" == "true" && ( -f requirements.txt || -f pyproject.toml ) ]]; then
             python -m pip install --upgrade pip
             python -m pip install ruff || true
             if command -v ruff >/dev/null 2>&1; then
@@ -76,7 +134,7 @@ jobs:
             ran=1
           fi
 
-          if [ -f go.mod ]; then
+          if [[ "$RUN_GO" == "true" && -f go.mod ]]; then
             gofmt -l . | tee /tmp/gofmt.out
             if [ -s /tmp/gofmt.out ]; then
               echo 'gofmt reported unformatted files'
@@ -85,7 +143,7 @@ jobs:
             ran=1
           fi
 
-          if [ -f pom.xml ]; then
+          if [[ "$RUN_JAVA" == "true" && -f pom.xml ]]; then
             if [ -f mvnw ]; then chmod +x mvnw; ./mvnw -B -ntp -DskipTests validate; else mvn -B -ntp -DskipTests validate; fi
             ran=1
           fi
@@ -96,26 +154,31 @@ jobs:
 
       - name: Build
         shell: bash
+        env:
+          RUN_NODE: ${{ steps.changes.outputs.run_node }}
+          RUN_PYTHON: ${{ steps.changes.outputs.run_python }}
+          RUN_JAVA: ${{ steps.changes.outputs.run_java }}
+          RUN_GO: ${{ steps.changes.outputs.run_go }}
         run: |
           set -euo pipefail
           ran=0
 
-          if [ -f package.json ]; then
+          if [[ "$RUN_NODE" == "true" && -f package.json ]]; then
             npm run build --if-present
             ran=1
           fi
 
-          if [ -f requirements.txt ] || [ -f pyproject.toml ]; then
+          if [[ "$RUN_PYTHON" == "true" && ( -f requirements.txt || -f pyproject.toml ) ]]; then
             python -m compileall -q .
             ran=1
           fi
 
-          if [ -f go.mod ]; then
+          if [[ "$RUN_GO" == "true" && -f go.mod ]]; then
             go build ./...
             ran=1
           fi
 
-          if [ -f pom.xml ]; then
+          if [[ "$RUN_JAVA" == "true" && -f pom.xml ]]; then
             if [ -f mvnw ]; then chmod +x mvnw; ./mvnw -B -ntp -DskipTests package; else mvn -B -ntp -DskipTests package; fi
             ran=1
           fi
@@ -126,16 +189,21 @@ jobs:
 
       - name: Test
         shell: bash
+        env:
+          RUN_NODE: ${{ steps.changes.outputs.run_node }}
+          RUN_PYTHON: ${{ steps.changes.outputs.run_python }}
+          RUN_JAVA: ${{ steps.changes.outputs.run_java }}
+          RUN_GO: ${{ steps.changes.outputs.run_go }}
         run: |
           set -euo pipefail
           ran=0
 
-          if [ -f package.json ]; then
+          if [[ "$RUN_NODE" == "true" && -f package.json ]]; then
             npm test --if-present
             ran=1
           fi
 
-          if [ -f requirements.txt ] || [ -f pyproject.toml ]; then
+          if [[ "$RUN_PYTHON" == "true" && ( -f requirements.txt || -f pyproject.toml ) ]]; then
             python -m pip install pytest || true
             if [ -d tests ] || [ -d test ]; then
               pytest -q || true
@@ -145,12 +213,12 @@ jobs:
             ran=1
           fi
 
-          if [ -f go.mod ]; then
+          if [[ "$RUN_GO" == "true" && -f go.mod ]]; then
             go test ./...
             ran=1
           fi
 
-          if [ -f pom.xml ]; then
+          if [[ "$RUN_JAVA" == "true" && -f pom.xml ]]; then
             if [ -f mvnw ]; then chmod +x mvnw; ./mvnw -B -ntp test; else mvn -B -ntp test; fi
             ran=1
           fi
